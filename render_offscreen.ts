@@ -1,0 +1,1 @@
+export function offscreenEnabled(){ return false } // stub toggle later

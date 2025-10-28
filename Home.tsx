@@ -2,1142 +2,1008 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { GripVertical, X, Loader2 } from 'lucide-react';
-import { RightToolbar } from './components/RightToolbar';
-import { TopHeader } from './components/TopHeader';
-import { MarketSummary } from './components/MarketSummary';
-import { CommunityIdeas } from './components/CommunityIdeas';
-import { useLanguage } from './i18n/LanguageContext';
-import { CryptoTickerTape } from './components/CryptoTickerTape';
-import { GoogleGenAI, Modality } from '@google/genai';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { AlertTriangle, CheckCircle, Minimize } from 'lucide-react';
+import Header from './Header.jsx';
+import LeftSidebar from './LeftSidebar.jsx';
+import ChartArea from './ChartArea.jsx';
+import ChartGrid from './ChartGrid.jsx';
+import RightSidebar from './RightSidebar.jsx';
+import { GoogleGenAI, Type } from '@google/genai';
+import { getChartData } from './chartUtils.js';
+import Toolbar from './Toolbar.jsx';
+import BottomDock from './BottomDock.jsx';
+import SymbolSearchModal from './SymbolSearchModal.jsx';
+import BottomBar from './BottomBar.jsx';
+import RightToolbar from './RightToolbar.jsx';
+import SettingsModal from './SettingsModal.jsx';
+import './shortcuts.js'; // AUTO: load shortcuts
+import './toast-1.js';
+import { useSettingsStore, useUIStore, t } from './ui.ts';
+import * as pine from './pine_runner.ts';
 
-// Statically imported components
-import { PersonalizedBriefing } from './components/PersonalizedBriefing';
-// FIX: Correct import path to be relative.
-import { IndicatorsAndStrategies } from './components/IndicatorsAndStrategies';
-import { SaudiStocks } from './components/SaudiStocks';
-// FIX: Correct import path to be relative.
-import { TradingAnalysis } from './components/TradingAnalysis';
-import { TopPerformingStocks } from './components/TopPerformingStocks';
-import { PerformanceStocks } from './components/PerformanceStocks';
-import { DividendSchedule } from './components/DividendSchedule';
-import { UsStockNews } from './components/UsStockNews';
-import { DigitalCurrencies } from './components/DigitalCurrencies';
-import { DigitalCurrencyAnalysis } from './components/DigitalCurrencyAnalysis';
-import { DigitalCurrencyPerformance } from './components/DigitalCurrencyPerformance';
-import { DigitalCurrencyNews } from './components/DigitalCurrencyNews';
-import { FuturesAnalysis } from './components/FuturesAnalysis';
-import { FuturesContracts } from './components/FuturesContracts';
-import { FuturesNews } from './components/FuturesNews';
-import { ForexAnalysis } from './components/ForexAnalysis';
-import { ForexHeatmap } from './components/ForexHeatmap';
-import { ForexNews } from './components/ForexNews';
-import { InflationMap } from './components/InflationMap';
-import { Footer } from './components/Footer';
-import { WatchlistPanel } from './components/WatchlistPanel';
-import { AddSectionModal, sectionList } from './components/AddSectionModal';
-import { AddSymbolModal } from './components/AddSymbolModal';
-import { WatchlistSettingsModal } from './components/WatchlistSettingsModal';
-import { ChatPanel } from './components/ChatPanel';
-import { VerifyAccountModal } from './components/VerifyAccountModal';
-import { StockScreener } from './components/StockScreener';
-import { EconomicCalendarModal } from './components/EconomicCalendarModal';
-import { SocialCommunicationModal } from './components/SocialCommunicationModal';
-import { NotificationsPanel } from './components/NotificationsPanel';
-import { UserSettingsModal } from './components/UserSettingsModal';
-import { BillingSettingsModal } from './components/BillingSettingsModal';
-import { HelpCenterPanel } from './components/HelpCenterPanel';
-import { NewsfeedModal } from './components/NewsfeedModal';
-import { ActivityPanel } from './components/ActivityPanel';
-import { Portfolio } from './components/Portfolio';
-import { OptionsStrategy } from './components/OptionsStrategy';
-import { TradingAnalysisPage } from './components/TradingAnalysisPage';
-import { IndicatorsAndStrategiesPage } from './components/IndicatorsAndStrategiesPage';
-import { TheLeapPage } from './components/TheLeapPage';
-import { CommunityPowerPage } from './components/CommunityPowerPage';
-import { BestChartsModal } from './components/BestChartsModal';
-import { ForexHeatmapModal } from './components/ForexHeatmapModal';
-import { MarketsPage } from './components/MarketsPage';
-import { NewsPage } from './components/NewsPage/NewsPage';
-import { BrokersPage } from './components/BrokersPage';
-import { AwardsPage } from './components/AwardsPage';
-import { SmartversePage } from './components/SmartversePage';
-import { YieldCurvesPage } from './components/YieldCurvesPage';
-import { BybitPage } from './components/BybitPage';
-import { PricesPage } from './components/PricesPage';
-import { TranslateModal } from './components/TranslateModal';
-import { IdeaDetailPage } from './components/IdeaDetailPage';
-import { DeveloperI18nInspector } from './components/DeveloperI18nInspector';
-import { MobileToolbar } from './components/MobileToolbar';
+declare global {
+  interface Window {
+    toast?: (message: string) => void;
+    stockSymbol?: string;
+    getToolConfig?: (tool: string) => any;
+  }
+}
 
-import { AssistantFAB } from './components/AssistantFAB';
-import { AssistantModal } from './components/AssistantModal';
-import { generateChartData, genericDetailsTemplate } from './data/chartData';
-import { initialWatchlistData, initialDetailedWatchlistData } from './data/watchlistData';
-import type { WatchlistData, WatchlistItem } from './data/watchlistData';
-import { AISuggestions } from './components/AISuggestions';
-import { MissingTranslationsModal } from './components/MissingTranslationsModal';
-import { CommandPalette } from './components/CommandPalette';
-import { useTheme } from './i18n/ThemeContext';
-import { useAI } from './i18n/AIContext';
-import { QuotaErrorModal } from './components/QuotaErrorModal';
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Derive sectionKeys from the single source of truth in AddSectionModal.tsx
-const sectionKeys = sectionList.map(s => s.key);
+const GlobalErrorModal = ({ error, onClose }) => {
+    if (!error) return null;
 
-// Generate initial state where all sections are visible
-const initialSectionsState = sectionKeys.reduce((acc, key) => {
-    acc[key] = true;
-    return acc;
-}, {});
+    const handleRefresh = () => {
+        window.location.reload();
+    };
 
-// Create a master list of all symbols for searching
-const allSymbolsForSearch = Object.values(initialWatchlistData)
-    .flatMap(category => category.items)
-    .map(item => ({
-        ...item,
-        typeKey: Object.keys(initialWatchlistData).find(key => initialWatchlistData[key].items.some(i => i.key === item.key))
-    }));
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[10000]" aria-modal="true" role="dialog" data-dev-name="GlobalErrorModal">
+            <div className="bg-[#1A1F2A] border border-[#2A3040] rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 text-white animate-fade-in-up">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-red-500/20 rounded-full flex-shrink-0 mt-1">
+                        <AlertTriangle className="w-6 h-6 text-red-500" />
+                    </div>
+                    <div className="flex-1">
+                         <h3 className="text-lg font-bold">{t('error_modal_title')}</h3>
+                         <p className="text-sm text-[#8A93A2] mt-2">{t('error_modal_description')}</p>
+                         <details className="mt-4 text-xs">
+                             <summary className="cursor-pointer text-[#8A93A2] hover:text-white">{t('error_modal_details')}</summary>
+                             <div className="mt-2 p-3 bg-[#12161D] rounded-md font-mono text-red-400 max-h-40 overflow-y-auto border border-red-500/20">
+                                <p className="font-bold">Error:</p>
+                                <code className="whitespace-pre-wrap break-all">{error.message || 'Unknown error'}</code>
+                                {error.details && (
+                                    <>
+                                        <p className="font-bold mt-2">Stack Trace:</p>
+                                        <code className="whitespace-pre-wrap break-all">{error.details}</code>
+                                    </>
+                                )}
+                             </div>
+                         </details>
+                    </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                     <button 
+                        onClick={onClose} 
+                        className="px-4 py-2 text-sm font-semibold text-[#E1E3E6] bg-[#2A3040] hover:bg-[#383f52] rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="GlobalErrorModal.DismissButton"
+                     >
+                        {t('common_dismiss')}
+                    </button>
+                    <button 
+                        onClick={handleRefresh} 
+                        className="px-4 py-2 text-sm font-semibold text-white bg-[#3E8BF3] hover:bg-[#1E66D6] rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="GlobalErrorModal.RefreshButton"
+                     >
+                        {t('common_refresh_page')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
+// FIX: Refactored to use React.PropsWithChildren for more robust children prop typing, resolving a potential TypeScript error.
+interface ConfirmationDialogProps {
+    isOpen: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+    title: string;
+}
+
+const ConfirmationDialog = ({ isOpen, onConfirm, onCancel, title, children }: React.PropsWithChildren<ConfirmationDialogProps>) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[10000]" aria-modal="true" role="dialog" data-dev-name="ConfirmationDialog">
+            <div className="bg-[#1A1F2A] border border-[#2A3040] rounded-lg shadow-xl p-6 w-full max-w-md mx-4 text-white animate-fade-in-up">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-yellow-500/20 rounded-full flex-shrink-0 mt-1">
+                        <AlertTriangle className="w-6 h-6 text-yellow-500" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-lg font-bold">{title}</h3>
+                        <div className="text-sm text-[#8A93A2] mt-2">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                    <button 
+                        onClick={onCancel} 
+                        className="px-4 py-2 text-sm font-semibold text-[#E1E3E6] bg-[#2A3040] hover:bg-[#383f52] rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="ConfirmationDialog.CancelButton"
+                    >
+                        {t('common_cancel')}
+                    </button>
+                    <button 
+                        onClick={onConfirm} 
+                        className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="ConfirmationDialog.ConfirmButton"
+                    >
+                        {t('common_confirm')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const QuotaExceededModal = ({ isOpen, onDisable, onClose }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[10000]" aria-modal="true" role="dialog" data-dev-name="QuotaExceededModal">
+            <div className="bg-[#1A1F2A] border border-[#2A3040] rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 text-white animate-fade-in-up">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-yellow-500/20 rounded-full flex-shrink-0 mt-1">
+                        <AlertTriangle className="w-6 h-6 text-yellow-500" />
+                    </div>
+                    <div className="flex-1">
+                         <h3 className="text-lg font-bold">{t('quota_modal_title')}</h3>
+                         <p className="text-sm text-[#8A93A2] mt-2">{t('quota_modal_description')}</p>
+                         <p className="text-sm text-[#8A93A2] mt-4">{t('quota_modal_question')}</p>
+                    </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                     <button 
+                        onClick={onClose} 
+                        className="px-4 py-2 text-sm font-semibold text-[#E1E3E6] bg-[#2A3040] hover:bg-[#383f52] rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="QuotaExceededModal.NotNowButton"
+                     >
+                        {t('common_not_now')}
+                    </button>
+                    <button 
+                        onClick={onDisable} 
+                        className="px-4 py-2 text-sm font-semibold text-white bg-yellow-600 hover:bg-yellow-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 focus:ring-offset-[#1A1F2A] transition-colors"
+                        data-dev-name="QuotaExceededModal.DisableButton"
+                     >
+                        {t('quota_modal_disable_button')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const Resizer = ({ onMouseDown, className = '' }) => (
+    <div 
+        className={`w-1.5 bg-transparent hover:bg-purple-500/50 cursor-col-resize transition-colors duration-200 ${className}`}
+        onMouseDown={onMouseDown}
+    />
+);
 
 export default function Home() {
-  const { language, t } = useLanguage();
-  const { setTheme } = useTheme();
-  const { isAIEnabled } = useAI();
-  
-  const [panelWidth, setPanelWidth] = useState(384);
-  const [activePanel, setActivePanel] = useState<'watchlist' | 'chat' | 'screener' | 'calendar' | 'social' | 'alerts' | 'help' | 'activity' | null>(null);
-  const [sections, setSections] = useState<{[key: string]: boolean}>(initialSectionsState);
-  const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
-  const [isAddSymbolModalOpen, setIsAddSymbolModalOpen] = useState(false);
-  const [isWatchlistSettingsModalOpen, setIsWatchlistSettingsModalOpen] = useState(false);
-  const [isVerifyAccountModalOpen, setIsVerifyAccountModalOpen] = useState(false);
-  const [isUserSettingsModalOpen, setIsUserSettingsModalOpen] = useState(false);
-  const [isBillingSettingsModalOpen, setIsBillingSettingsModalOpen] = useState(false);
-  const [isNewsfeedModalOpen, setIsNewsfeedModalOpen] = useState(false);
-  const [isBestChartsModalOpen, setIsBestChartsModalOpen] = useState(false);
-  const [isForexMapModalOpen, setIsForexMapModalOpen] = useState(false);
-  const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
-  const [isTranslateModalOpen, setIsTranslateModalOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isI18nInspectorOpen, setIsI18nInspectorOpen] = useState(false);
-  const [selectedIdea, setSelectedIdea] = useState(null);
-  const [updatedSymbols, setUpdatedSymbols] = useState<Set<string>>(new Set());
-  const [reminders, setReminders] = useState<Set<string>>(() => {
-    try {
-        const savedReminders = localStorage.getItem('event_reminders');
-        return savedReminders ? new Set(JSON.parse(savedReminders)) : new Set();
-    } catch {
-        return new Set();
-    }
-  });
-
-  const toggleReminder = (eventId: string) => {
-    setReminders(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(eventId)) {
-            newSet.delete(eventId);
-        } else {
-            newSet.add(eventId);
-        }
-        try {
-            localStorage.setItem('event_reminders', JSON.stringify(Array.from(newSet)));
-        } catch (e) {
-            console.error('Failed to save reminders to localStorage', e);
-        }
-        return newSet;
-    });
-  };
-
-  useEffect(() => {
-    try {
-        const savedWidth = localStorage.getItem('panelWidth');
-        if (savedWidth) {
-            const parsedWidth = parseInt(savedWidth, 10);
-            if(parsedWidth >= 320 && parsedWidth <= 600) {
-                setPanelWidth(parsedWidth);
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load panel width from localStorage', e);
-    }
-  }, []);
-
-  const handleMouseDownOnResizer = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    document.body.classList.add('resizing-watchlist');
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-        let newWidth;
-        // The flex-direction is reversed for 'en', so the panel is on the right.
-        if (language === 'en') {
-            newWidth = window.innerWidth - moveEvent.clientX;
-        } else { // For 'ar' and other RTL languages, panel is on the left.
-            newWidth = moveEvent.clientX;
-        }
-
-        const constrainedWidth = Math.max(320, Math.min(newWidth, 600));
-        setPanelWidth(constrainedWidth);
-    };
-
-    const handleMouseUp = () => {
-        document.body.classList.remove('resizing-watchlist');
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-        
-        setPanelWidth(prevWidth => {
-            try {
-                localStorage.setItem('panelWidth', String(prevWidth));
-            } catch(e) { console.error('Failed to save panel width to localStorage', e); }
-            return prevWidth;
-        });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp, { once: true });
-  }, [language]);
-
-
-  const [watchlistData, setWatchlistData] = useState<WatchlistData>(() => {
-    try {
-        const savedWatchlist = localStorage.getItem('watchlist_data');
-        if (savedWatchlist) {
-            const parsedData = JSON.parse(savedWatchlist);
-            if (parsedData && typeof parsedData === 'object' && Object.keys(parsedData).length > 0) {
-                return parsedData;
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load watchlist from localStorage', e);
-    }
-    return initialWatchlistData;
-  });
-
-   useEffect(() => {
-        const intervalId = setInterval(() => {
-            setWatchlistData(prevData => {
-                const newData = JSON.parse(JSON.stringify(prevData));
-                const updated = new Set<string>();
-                
-                Object.keys(newData).forEach(categoryKey => {
-                    newData[categoryKey].items.forEach(item => {
-                        // 30% chance to update each item
-                        if (Math.random() < 0.3) {
-                            const price = parseFloat(item.price.replace(/,/g, ''));
-                            const changeFactor = (Math.random() - 0.5) * 0.05; // up to 2.5% change
-                            const changeAmount = price * changeFactor;
-                            const newPrice = price + changeAmount;
-                            const oldPrice = newPrice - item.change;
-                            
-                            item.price = newPrice.toFixed(item.currency === 'JPY' ? 0 : 2);
-                            item.change = item.change + changeAmount;
-                            item.isPositive = item.change >= 0;
-                            item.changePct = oldPrice !== 0 ? (item.change / oldPrice) * 100 : 0;
-                            
-                            updated.add(item.key);
-                        }
-                    });
-                });
-                
-                if (updated.size > 0) {
-                    setUpdatedSymbols(updated);
-                    // Animation duration is 1s, clear after that
-                    setTimeout(() => setUpdatedSymbols(new Set()), 1000);
-                }
-
-                return newData;
-            });
-        }, 2000); // Update every 2 seconds
-
-        return () => clearInterval(intervalId);
-    }, []);
-
-  const [detailedWatchlistData, setDetailedWatchlistData] = useState(initialDetailedWatchlistData);
-  const [mainView, setMainView] = useState<'default' | 'portfolio' | 'options' | 'trading_analysis' | 'indicators_strategies' | 'the_leap' | 'community_power' | 'markets' | 'news' | 'brokers_page' | 'awards_page' | 'smartverse' | 'yield_curves' | 'bybit' | 'prices' | 'idea_detail'>('default');
-  
-  const [activeMarketTab, setActiveMarketTab] = useState('stocks');
-  const [activeMarketTicker, setActiveMarketTicker] = useState('2222');
-
-  const chartPeriodsValue = t('chart_periods');
-  const chartPeriods = Array.isArray(chartPeriodsValue) ? chartPeriodsValue : [];
-  const [activeTimeframe, setActiveTimeframe] = useState(chartPeriods[0] ?? '');
-  
-  // State for Drag and Drop & Layouts
-  const [sectionOrder, setSectionOrder] = useState(sectionKeys);
-  const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ key: string | null, position: 'before' | 'after' } | null>(null);
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    try {
-        const savedFavorites = localStorage.getItem('stock_favorites');
-        if (savedFavorites) {
-            return new Set(JSON.parse(savedFavorites));
-        }
-    } catch (e) {
-        console.error('Failed to load favorites from localStorage', e);
-    }
-    return new Set();
-  });
-
-  const [layouts, setLayouts] = useState(() => {
-    try {
-        const savedLayouts = localStorage.getItem('dashboard_layouts');
-        return savedLayouts ? JSON.parse(savedLayouts) : { [t('default_layout')]: { order: sectionKeys, visibility: initialSectionsState } };
-    } catch {
-        return { [t('default_layout')]: { order: sectionKeys, visibility: initialSectionsState } };
-    }
-  });
-  const [activeLayoutName, setActiveLayoutName] = useState(t('default_layout'));
-    
-  const [communityIdeas, setCommunityIdeas] = useState([]);
-  const [indicatorsAndStrategiesData, setIndicatorsAndStrategiesData] = useState([]);
-  const [tradingAnalysisData, setTradingAnalysisData] = useState([]);
-  const [isContentLoading, setIsContentLoading] = useState(true);
-
-  const [userNews, setUserNews] = useState([]);
-  const [userAnalyses, setUserAnalyses] = useState([]);
-
-
-    const generateAndCacheImages = useCallback(async (data, setData, cacheKey) => {
-        const fullCacheKey = `${cacheKey}_${language}`;
-        try {
-            const cachedImages = localStorage.getItem(fullCacheKey);
-            if (cachedImages) {
-                const parsedImages = JSON.parse(cachedImages);
-                const isCacheValid = data.length > 0 && data.every(item => parsedImages[item.id]);
-                if (isCacheValid) {
-                    const updatedData = data.map(item => ({ ...item, img: parsedImages[item.id] }));
-                    setData(updatedData);
-                    return;
-                }
-            }
-        } catch (e) { console.error("Failed to read image cache", e); }
-
-        setData(d => d.map(item =>
-            (item.img?.includes('picsum') || item.img?.includes('unsplash'))
-                ? { ...item, isImageLoading: true }
-                : item
-        ));
-
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const newImages = {};
-
-        const promises = data.map(async (item) => {
-            if (item.isImageLoading) {
-                try {
-                    
-                    const response = await ai.models.generateContent({
-                        config: {
-                            responseModalities: [Modality.IMAGE],
-                        },
-                    });
-
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) {
-                            const base64ImageBytes: string = part.inlineData.data;
-                            const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
-                            newImages[item.id] = imageUrl;
-                            return { ...item, img: imageUrl, isImageLoading: false };
-                        }
-                    }
-                    return { ...item, isImageLoading: false };
-                } catch (e) {
-                    console.error(`Failed to generate image for "${item.title}"`, e);
-                    return { ...item, isImageLoading: false };
-                }
-            }
-            return item;
-        });
-        
-        const results = await Promise.all(promises);
-        setData(results);
-
-        try {
-            if (Object.keys(newImages).length > 0) {
-                localStorage.setItem(fullCacheKey, JSON.stringify(newImages));
-            }
-        } catch (e) { console.error("Failed to write to image cache", e); }
-    }, [language, t]);
+    const { settings, setSettings } = useSettingsStore();
+    const { 
+        rightSidebarView, setRightSidebarView, activeTool,
+        areDrawingsLocked, toggle, undoDrawing, redoDrawing, alerts
+    } = useUIStore();
+    const isLeftPanelOpen = useUIStore(state => state.rightbar.leftPanelOpen);
+    const isAiEnabled = settings.ai?.enabled ?? false;
 
     useEffect(() => {
-        const fetchDataAndImages = async () => {
-            setIsContentLoading(true);
-            try {
-                const [communityRes, indicatorsRes, analysisRes] = await Promise.all([
-                    fetch(`/data/${language}/community-ideas.json`),
-                    fetch(`/data/${language}/indicators-strategies.json`),
-                    fetch(`/data/${language}/trading-analysis.json`),
-                ]);
+        document.documentElement.className = settings.theme;
+        document.documentElement.lang = settings.general.language;
+        document.documentElement.dir = settings.general.language === 'ar' ? 'rtl' : 'ltr';
+    }, [settings.theme, settings.general.language]);
 
-                if (!communityRes.ok || !indicatorsRes.ok || !analysisRes.ok) {
-                    throw new Error('Failed to fetch content data');
-                }
-                
-                const communityData = await communityRes.json();
-                const indicatorsData = await indicatorsRes.json();
-                const analysisData = await analysisRes.json();
+  const [currentStock, setCurrentStock] = useState('BTCUSD');
+  const [chartLayout, setChartLayout] = useState('grid');
+  const [chartType, setChartType] = useState('Candlestick');
+  const [timeframe, setTimeframe] = useState('1D');
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [timeRange, setTimeRange] = useState('1Y');
 
-                if (isAIEnabled) {
-                     // Using Promise.all to run image generation in parallel
-                    await Promise.all([
-                        generateAndCacheImages(communityData, setCommunityIdeas, 'communityIdeasImages'),
-                        generateAndCacheImages(indicatorsData, setIndicatorsAndStrategiesData, 'indicatorsAndStrategiesImages'),
-                        generateAndCacheImages(analysisData, setTradingAnalysisData, 'tradingAnalysisImages'),
-                    ]);
-                } else {
-                    setCommunityIdeas(communityData);
-                    setIndicatorsAndStrategiesData(indicatorsData);
-                    setTradingAnalysisData(analysisData);
-                }
-
-            } catch (error) {
-                console.error("Error fetching or processing content data:", error);
-                // Fallback to empty arrays on error
-                setCommunityIdeas([]);
-                setIndicatorsAndStrategiesData([]);
-                setTradingAnalysisData([]);
-            } finally {
-                setIsContentLoading(false);
-            }
-        };
-
-        fetchDataAndImages();
-    }, [language, isAIEnabled, generateAndCacheImages]);
+  const [aiAnnotations, setAiAnnotations] = useState([]);
+  const [isAnnotationsLoading, setIsAnnotationsLoading] = useState(false);
+  const [annotationsError, setAnnotationsError] = useState('');
   
-  const saveIdea = useCallback((ideaData: {id?: any; [key: string]: any}) => {
-    const isUpdate = !!ideaData.id;
-
-    const finalIdea: { [key: string]: any } = {
-        author: t('you_label'),
-        authorAvatarUrl: 'https://i.pravatar.cc/150?u=current-user',
-        ...ideaData,
-        id: isUpdate ? ideaData.id : Date.now(),
-        date: isUpdate ? t('edited_just_now_label') : (ideaData.status === 'published' ? t('just_now_label') : ''),
-        tags: (ideaData.tags || []).map(tag => {
-            if (typeof tag === 'string' && tag.startsWith('tag_')) return tag;
-            return `tag_${(tag || '').toLowerCase().replace(/ /g, '_')}`;
-        }),
-    };
-
-    if (!isUpdate) {
-        finalIdea.likes = ideaData.likes || 0;
-        finalIdea.comments = ideaData.comments || 0;
-        finalIdea.views = ideaData.views || 0;
-    }
-
-    const updateState = (setter) => {
-        setter(prev => {
-            if (isUpdate) {
-                // FIX: Specified a more concrete type for `item` to resolve TypeScript error about 'id' not existing on 'unknown'.
-                return prev.map((item: { id: number | string }) => item.id === finalIdea.id ? finalIdea : item);
-            }
-            return [finalIdea, ...prev];
-        });
-    };
-
-    switch (finalIdea.section) {
-        case 'indicatorsAndStrategies':
-            updateState(setIndicatorsAndStrategiesData);
-            break;
-        case 'tradingAnalysis':
-            updateState(setTradingAnalysisData);
-            break;
-        case 'communityIdeas':
-        default:
-            updateState(setCommunityIdeas);
-            break;
-    }
-  }, [t]);
+  const [indicators, setIndicators] = useState([]);
   
-  const deleteIdea = useCallback((ideaId, section) => {
-    if (window.confirm(t('confirm_delete_idea'))) {
-        switch(section) {
-            case 'indicatorsAndStrategies':
-                 // FIX: Add type to 'idea' parameter to resolve TypeScript error.
-                 setIndicatorsAndStrategiesData(prev => prev.filter((idea: { id: any }) => idea.id !== ideaId));
-                 break;
-            case 'tradingAnalysis':
-                 // FIX: Add type to 'idea' parameter to resolve TypeScript error. The error was reported on this line.
-                 setTradingAnalysisData(prev => prev.filter((idea: { id: any }) => idea.id !== ideaId));
-                 break;
-            case 'communityIdeas':
-            default:
-                // FIX: Add type to 'idea' parameter to resolve TypeScript error.
-                setCommunityIdeas(prev => prev.filter((idea: { id: any }) => idea.id !== ideaId));
-                break;
-        }
-        return true;
-    }
-    return false;
-  }, [t]);
+  const [isDevMode, setIsDevMode] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const highlightedElementRef = useRef(null);
 
-  const saveAnalysis = useCallback((analysisData: any) => {
-    const isUpdate = !!analysisData.id;
-
-    const finalAnalysis = {
-        author: t('you_label'),
-        ...analysisData,
-        id: isUpdate ? analysisData.id : Date.now(),
-        date: isUpdate ? t('edited_just_now_label') : (analysisData.status === 'published' ? t('just_now_label') : ''),
-    };
-
-    setUserAnalyses(prev => {
-        if (isUpdate) {
-            return prev.map((a: { id: number | string }) => a.id === finalAnalysis.id ? finalAnalysis : a);
-        }
-        return [finalAnalysis, ...prev];
-    });
-  }, [t]);
-
-  const deleteAnalysis = useCallback((analysisId: any) => {
-    if (window.confirm(t('confirm_delete_analysis'))) {
-      setUserAnalyses(prev => prev.filter(a => a.id !== analysisId));
-      return true;
-    }
-    return false;
-  }, [t]);
+  const [globalError, setGlobalError] = useState(null);
   
-  const saveNews = useCallback((newsData: any) => {
-    const isUpdate = !!newsData.id;
+  const [highlightedAnnotationId, setHighlightedAnnotationId] = useState(null);
 
-    const finalNews = {
-        author: t('you_label'),
-        authorAvatarUrl: 'https://i.pravatar.cc/150?u=current-user',
-        ...newsData,
-        id: isUpdate ? newsData.id : Date.now(),
-        date: isUpdate ? t('edited_just_now_label') : (newsData.status === 'published' ? t('just_now_label') : ''),
-        tags: (newsData.tags || []).map(tag => {
-            if (typeof tag === 'string' && tag.startsWith('tag_')) return tag;
-            return `tag_${(tag || '').toLowerCase().replace(/ /g, '_')}`;
-        }),
-    };
-    
-    setUserNews(prev => {
-        if (isUpdate) {
-            return prev.map((n: { id: number | string }) => n.id === finalNews.id ? finalNews : n);
-        }
-        return [finalNews, ...prev];
-    });
-  }, [t]);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
+  const lastLeftSidebarWidth = useRef(300);
 
-  const deleteNews = useCallback((newsId) => {
-    if (window.confirm(t('confirm_delete_idea'))) {
-        setUserNews(prev => prev.filter(news => news.id !== newsId));
-        return true;
-    }
-    return false;
-  }, [t]);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(370);
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isZenMode, setIsZenMode] = useState(false);
+  
+  const [bottomDockHeight, setBottomDockHeight] = useState(40);
+  const [isDockMaximized, setIsDockMaximized] = useState(false);
+  const [bottomDockInitialTab, setBottomDockInitialTab] = useState('trading');
+  const mainContentRef = useRef(null);
+
+  const [isClearConfirmVisible, setIsClearConfirmVisible] = useState(false);
+  
+  // Layout Management State
+  const [savedLayouts, setSavedLayouts] = useState<string[]>([]);
+  const [activeLayoutName, setActiveLayoutName] = useState<string | null>(null);
+  
+  const [chartDataForAnalysis, setChartDataForAnalysis] = useState({ priceData: [], volumeData: [] });
+  const [provider, setProvider] = useState(() => localStorage.getItem('provider') || 'mock');
+
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
 
   useEffect(() => {
-    const checkScheduledPosts = () => {
-      const now = new Date();
-      const checkAndPublish = (items, setter) => {
-        let changed = false;
-        const updatedItems = items.map(item => {
-          if (item.status === 'scheduled' && item.publishAt && new Date(item.publishAt) <= now) {
-            changed = true;
-            return { ...item, status: 'published', date: t('just_now_label') };
-          }
-          return item;
-        });
-        if (changed) {
-          setter(updatedItems);
+    const handleQuotaError = () => {
+        if (useSettingsStore.getState().settings.ai.enabled) {
+            setIsQuotaModalOpen(true);
         }
-      };
-      
-      checkAndPublish(communityIdeas, setCommunityIdeas);
-      checkAndPublish(indicatorsAndStrategiesData, setIndicatorsAndStrategiesData);
-      checkAndPublish(tradingAnalysisData, setTradingAnalysisData);
-      checkAndPublish(userNews, setUserNews);
-      checkAndPublish(userAnalyses, setUserAnalyses);
     };
+  }, []);
 
-    const intervalId = setInterval(checkScheduledPosts, 10000); // Check every 10 seconds
-    return () => clearInterval(intervalId);
-  }, [communityIdeas, indicatorsAndStrategiesData, tradingAnalysisData, userNews, userAnalyses, t]);
+  useEffect(() => {
+    const aiViews = ['AIBriefing', 'AIHub', 'AIPatterns', 'AIIndicatorSuggestions', 'Annotations', 'News', 'Analysis', 'Chat'];
+    if (!isAiEnabled && aiViews.includes(rightSidebarView)) {
+        setRightSidebarView(null);
+    }
+  }, [isAiEnabled, rightSidebarView, setRightSidebarView]);
 
-  const publishedCommunityIdeas = useMemo(() => communityIdeas.filter(idea => idea.status === 'published'), [communityIdeas]);
-  const publishedIndicators = useMemo(() => indicatorsAndStrategiesData.filter(idea => idea.status === 'published'), [indicatorsAndStrategiesData]);
-  const publishedUserNews = useMemo(() => userNews.filter(news => news.status === 'published'), [userNews]);
-  const publishedUserAnalyses = useMemo(() => userAnalyses.filter(analysis => analysis.status === 'published'), [userAnalyses]);
-
-  const combinedTradingAnalysis = useMemo(() => [
-      ...publishedUserAnalyses.filter(a => a.section === 'tradingAnalysis'),
-      ...tradingAnalysisData.filter(idea => idea.status === 'published')
-  ], [publishedUserAnalyses, tradingAnalysisData]);
-
-  const toggleFavorite = (stockId: string) => {
-    setFavorites(prevFavorites => {
-        const newFavorites = new Set(prevFavorites);
-        if (newFavorites.has(stockId)) {
-            newFavorites.delete(stockId);
-        } else {
-            newFavorites.add(stockId);
-        }
-        try {
-            localStorage.setItem('stock_favorites', JSON.stringify(Array.from(newFavorites)));
-        } catch (e) {
-            console.error('Failed to save favorites to localStorage', e);
-        }
-        return newFavorites;
-    });
+  const handleDisableAi = () => {
+    setSettings(prev => ({
+        ...prev,
+        ai: { ...prev.ai, enabled: false },
+    }));
+    setIsQuotaModalOpen(false);
+    window.toast?.(t('toast_ai_disabled'));
   };
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-            e.preventDefault();
-            setIsCommandPaletteOpen(p => !p);
-        }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    const handleProviderChange = (e) => setProvider(e.detail);
+    window.addEventListener('provider:change', handleProviderChange);
+    return () => window.removeEventListener('provider:change', handleProviderChange);
+  }, []);
+
+  useEffect(() => {
+      let isMounted = true;
+      const fetchData = async () => {
+          try {
+              const data = await getChartData(currentStock, '1D', provider);
+              if (isMounted) {
+                  setChartDataForAnalysis(data);
+              }
+          } catch (e) {
+              console.error("Failed to fetch analysis data:", e);
+              const mockData = await getChartData(currentStock, '1D', 'mock');
+               if (isMounted) {
+                  setChartDataForAnalysis(mockData);
+              }
+          }
+      };
+      fetchData();
+      return () => { isMounted = false; };
+  }, [currentStock, provider]);
+
+  useEffect(() => {
+    const layouts = Object.keys(localStorage)
+      .filter(key => key.startsWith('vs_layout_'))
+      .map(key => key.replace('vs_layout_', ''));
+    setSavedLayouts(layouts);
+  }, []);
+
+  const handleStockChange = useCallback((newStock: string) => {
+    if (newStock && newStock.trim() !== '') {
+      setCurrentStock(newStock.trim().toUpperCase());
+      setIsReplayMode(false); // Exit replay mode on stock change
+    }
   }, []);
   
-  useEffect(() => {
-    try {
-        localStorage.setItem('watchlist_data', JSON.stringify(watchlistData));
-    } catch (e) {
-        console.error('Failed to save watchlist to localStorage', e);
-    }
-  }, [watchlistData]);
-
-  const saveLayout = (name: string) => {
-      const newLayouts = { ...layouts, [name]: { order: sectionOrder, visibility: sections } };
-      setLayouts(newLayouts);
-      localStorage.setItem('dashboard_layouts', JSON.stringify(newLayouts));
-      setActiveLayoutName(name);
+  const handleTimeframeChange = (newTimeframe: string) => {
+    setTimeframe(newTimeframe);
   };
 
-  const loadLayout = (name: string) => {
-      if (layouts[name]) {
-          setSectionOrder(layouts[name].order);
-          setSections(layouts[name].visibility);
-          setActiveLayoutName(name);
+  const handleToggleZenMode = useCallback(() => {
+    setIsZenMode(prev => !prev);
+  }, []);
+
+  const handleDockResizeStart = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = bottomDockHeight;
+    const handleMouseMove = (event) => {
+      const newHeight = startHeight - (event.clientY - startY);
+      if (newHeight >= 40 && newHeight < (mainContentRef.current?.clientHeight || window.innerHeight) * 0.9) {
+        setBottomDockHeight(newHeight);
+        setIsDockMaximized(false);
       }
+    };
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const deleteLayout = (name: string) => {
-    if (name === t('default_layout')) return; // Cannot delete default
-    const newLayouts = { ...layouts };
-    delete newLayouts[name];
-    setLayouts(newLayouts);
-    localStorage.setItem('dashboard_layouts', JSON.stringify(newLayouts));
-    if (activeLayoutName === name) {
-        loadLayout(t('default_layout'));
-    }
+  const handleToggleDock = useCallback((tab?: string) => {
+    setBottomDockHeight(currentHeight => {
+      const isOpening = currentHeight <= 40;
+      if (isOpening) {
+        setBottomDockInitialTab(tab || 'trading');
+      }
+      return isOpening ? 300 : 40;
+    });
+    setIsDockMaximized(false);
+  }, []);
+  
+  const handleMaximizeDock = () => {
+      if (isDockMaximized) {
+          setBottomDockHeight(300); // Restore to default
+      } else {
+          const mainHeight = mainContentRef.current?.clientHeight || window.innerHeight;
+          setBottomDockHeight(mainHeight * 0.9); // Maximize to 90%
+      }
+      setIsDockMaximized(!isDockMaximized);
   };
-
-  const marketData = useMemo(() => {
-    const transformedData: {[key: string]: any[]} = {};
-    const allCategories = new Set(Object.keys(watchlistData));
-    ['indices', 'stocks', 'digital_currencies', 'futures', 'forex', 'bonds', 'etfs'].forEach(cat => allCategories.add(cat));
-
-    for (const categoryKey of Array.from(allCategories)) {
-        const category = watchlistData[categoryKey];
-        transformedData[categoryKey] = category ? category.items.map(item => {
-            const numericChange = Number(item.change);
-            return {
-                id: item.key,
-                nameKey: item.nameKey,
-                value: item.price,
-                change: `${numericChange >= 0 ? '+' : ''}${numericChange.toFixed(2)}`,
-                currencyKey: (item.currency || 'usd').toLowerCase(),
-                iconUrl: item.iconUrl,
-            };
-        }) : [];
-    }
-    return transformedData;
-  }, [watchlistData]);
-
-  const currentTickerInfo = useMemo(() => {
-    return Object.values(marketData).flat().find(item => item.id === activeMarketTicker);
-  }, [activeMarketTicker, marketData]);
-
-  const currentChartData = useMemo(() => {
-      if (!currentTickerInfo) return null;
-      const isStock = activeMarketTab === 'stocks' || activeMarketTab === 'indices';
-      return generateChartData(parseFloat(currentTickerInfo.value.replace(/,/g, '')), parseFloat(currentTickerInfo.change), isStock, activeTimeframe);
-  }, [currentTickerInfo, activeTimeframe, activeMarketTab]);
   
   useEffect(() => {
-    if (mainView === 'prices') {
-      document.body.classList.add('prices_page_body');
-    } else {
-      document.body.classList.remove('prices_page_body');
-    }
-    // Cleanup function
+    const handleToggleDockEvent = (event: CustomEvent) => {
+        const { tab } = event.detail;
+        handleToggleDock(tab);
+    };
+    window.addEventListener('dock:toggle', handleToggleDockEvent as EventListener);
     return () => {
-      document.body.classList.remove('prices_page_body');
+        window.removeEventListener('dock:toggle', handleToggleDockEvent as EventListener);
     };
-  }, [mainView]);
+  }, [handleToggleDock]);
 
-  const handleMarketTabChange = (tabKey: string) => {
-    setActiveMarketTab(tabKey);
-    const firstTickerId = marketData[tabKey]?.[0]?.id;
-    if (firstTickerId) {
-        setActiveMarketTicker(firstTickerId);
-    }
-  };
-
-  const handleMarketTickerChange = (tickerId: string) => {
-    setActiveMarketTicker(tickerId);
-  };
-
-  const toggleSection = (sectionKey: string) => {
-    setSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
-  };
-  
-  const resetSections = () => {
-    setSections(initialSectionsState);
-    setSectionOrder(sectionKeys);
-  }
-
-  const openAddSectionModal = () => setIsAddSectionModalOpen(true);
-  const closeAddSectionModal = () => setIsAddSectionModalOpen(false);
-
-  const openAddSymbolModal = () => setIsAddSymbolModalOpen(true);
-  const closeAddSymbolModal = () => setIsAddSymbolModalOpen(false);
-
-  const openWatchlistSettingsModal = () => setIsWatchlistSettingsModalOpen(true);
-  const closeWatchlistSettingsModal = () => setIsWatchlistSettingsModalOpen(false);
-
-  const openVerifyAccountModal = () => setIsVerifyAccountModalOpen(true);
-  const closeVerifyAccountModal = () => setIsVerifyAccountModalOpen(false);
-
-  const openUserSettingsModal = () => {
-    setActivePanel(null); // Close any active side panel
-    setIsUserSettingsModalOpen(true);
-  };
-  const closeUserSettingsModal = useCallback(() => setIsUserSettingsModalOpen(false), []);
-  
-  const openBillingSettingsModal = useCallback(() => {
-    closeUserSettingsModal();
-    setIsBillingSettingsModalOpen(true);
-  }, [closeUserSettingsModal]);
-
-  const closeBillingSettingsModal = () => setIsBillingSettingsModalOpen(false);
-
-  const openNewsfeedModal = () => setIsNewsfeedModalOpen(true);
-  const closeNewsfeedModal = () => setIsNewsfeedModalOpen(false);
-
-  const openBestChartsModal = () => setIsBestChartsModalOpen(true);
-  const closeBestChartsModal = () => setIsBestChartsModalOpen(false);
-
-  const openForexMapModal = () => setIsForexMapModalOpen(true);
-  const closeForexMapModal = () => setIsForexMapModalOpen(false);
-  
-  const openTranslateModal = () => setIsTranslateModalOpen(true);
-  const closeTranslateModal = () => setIsTranslateModalOpen(false);
-
-  const findSymbolByTicker = (ticker: string): WatchlistItem | undefined => {
-      const upperTicker = ticker.toUpperCase();
-      return allSymbolsForSearch.find(s => s.symbol.toUpperCase() === upperTicker);
-  };
-
-  const addSymbolToWatchlist = (symbolOrTicker: WatchlistItem | string) => {
-    const symbolToAdd = typeof symbolOrTicker === 'string' ? findSymbolByTicker(symbolOrTicker) : symbolOrTicker;
-
-    if (!symbolToAdd) {
-        const symbolString = typeof symbolOrTicker === 'string' ? symbolOrTicker : symbolOrTicker.symbol;
-        console.warn(`Symbol with ticker "${symbolString}" not found.`);
-        return t('notifications.symbol_not_found', { symbol: symbolString });
-    }
-
-    const categoryKey = getCategoryFromType(symbolToAdd.typeKey);
-    
-    let alreadyExists = false;
-    setWatchlistData(prevData => {
-      const category = prevData[categoryKey];
-      if (!category) return prevData;
-
-      const isDuplicate = category.items.some(item => item.key === symbolToAdd.key);
-      if (isDuplicate) {
-          alreadyExists = true;
-          return prevData;
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isZenMode) {
+        setIsZenMode(false);
       }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isZenMode]);
 
-      const newCategory = {
-        ...category,
-        items: [symbolToAdd, ...category.items]
+  useEffect(() => {
+    const handleSymbolChange = (event: Event) => {
+        const customEvent = event as CustomEvent<string>;
+        const newStock = customEvent.detail;
+        if (newStock && typeof newStock === 'string' && newStock.trim() !== '') {
+            handleStockChange(newStock);
+        }
+    };
+    window.addEventListener('chart:symbol', handleSymbolChange);
+    return () => {
+        window.removeEventListener('chart:symbol', handleSymbolChange);
+    };
+  }, [handleStockChange]);
+
+  useEffect(() => {
+    const handleAiAction = (event: Event) => {
+      const { detail: command } = event as CustomEvent<any>;
+      if (command.command_name === 'add_indicator' && command.parameters) {
+        const { indicator_name, periods } = command.parameters;
+        if(indicator_name && periods) {
+            const newIndicator = {
+                id: `${indicator_name}-${periods.join('-')}-${Date.now()}`,
+                name: indicator_name,
+                periods: periods,
+                color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')
+            };
+            setIndicators(prev => {
+                if (prev.some(ind => ind.name === newIndicator.name && JSON.stringify(ind.periods) === JSON.stringify(newIndicator.periods))) {
+                    return prev;
+                }
+                return [...prev, newIndicator];
+            });
+        }
+      } else if (command.command_name === 'change_symbol' && command.parameters?.symbol) {
+          handleStockChange(command.parameters.symbol);
+      }
+    };
+
+    window.addEventListener('chart:ai_action', handleAiAction);
+    return () => {
+      window.removeEventListener('chart:ai_action', handleAiAction);
+    };
+  }, [handleStockChange]);
+
+  const handleAddPineIndicator = (code) => {
+      if (!code || chartDataForAnalysis.priceData.length === 0) return;
+      
+      const pineIndicator = {
+          id: `pine-${Date.now()}`,
+          name: 'Pine',
+          pineCode: code,
+          color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')
       };
+      
+      // Check if a pine indicator already exists and replace it for simplicity
+      setIndicators(prev => [...prev.filter(ind => ind.name !== 'Pine'), pineIndicator]);
+      window.toast?.(t('toast_pine_added'));
+  };
 
-      return {
-        ...prevData,
-        [categoryKey]: newCategory
+  useEffect(() => {
+    if (isLeftPanelOpen) {
+      setLeftSidebarWidth(lastLeftSidebarWidth.current);
+    } else {
+      if (leftSidebarWidth > 48) {
+        lastLeftSidebarWidth.current = leftSidebarWidth;
+      }
+      setLeftSidebarWidth(48);
+    }
+  }, [isLeftPanelOpen, leftSidebarWidth]);
+
+
+  const handleLeftResize = (e) => {
+      e.preventDefault();
+      const initialX = e.clientX;
+      const initialWidth = leftSidebarWidth;
+      
+      const moveHandler = (event) => {
+          const newWidth = initialWidth + (event.clientX - initialX);
+          if (newWidth > 200 && newWidth < 600) { 
+              setLeftSidebarWidth(newWidth);
+              lastLeftSidebarWidth.current = newWidth;
+          }
       };
-    });
-
-    if (alreadyExists) return t('notifications.symbol_already_in_watchlist', { name: t(symbolToAdd.nameKey) });
+      
+      const upHandler = () => {
+          document.removeEventListener('mousemove', moveHandler);
+          document.removeEventListener('mouseup', upHandler);
+      };
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', upHandler);
+  };
     
-    setDetailedWatchlistData(prevDetails => {
-        if(prevDetails[symbolToAdd.key]) return prevDetails;
+  const handleRightResize = (e) => {
+      e.preventDefault();
+      const initialX = e.clientX;
+      const initialWidth = rightSidebarWidth;
+      const moveHandler = (event) => {
+        const newWidth = initialWidth - (event.clientX - initialX);
+         if (newWidth > 250 && newWidth < 600) {
+            setRightSidebarWidth(newWidth);
+        }
+      };
+      
+      const upHandler = () => {
+          document.removeEventListener('mousemove', moveHandler);
+          document.removeEventListener('mouseup', upHandler);
+      };
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', upHandler);
+  };
+
+  useEffect(() => {
+    const handleError = (message, source, lineno, colno, error) => {
+      console.error("Global Error Caught:", message, error);
+      setGlobalError({
+        message: error?.message || message,
+        details: `Error in ${source} at line ${lineno}:${colno}`
+      });
+      return true;
+    };
+
+    const handleRejection = (event) => {
+      console.error("Unhandled Rejection Caught:", event.reason);
+      if (event.reason instanceof DOMException && event.reason.name === 'AbortError') {
+        return;
+      }
+      setGlobalError({
+        message: event.reason?.message || 'An unhandled promise rejection occurred.',
+        details: event.reason?.stack || 'No stack trace available.'
+      });
+      event.preventDefault();
+    };
+
+    window.onerror = handleError;
+    window.addEventListener('unhandledrejection', handleRejection);
+
+    return () => {
+      window.onerror = null;
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (toastMessage) {
+        const timer = setTimeout(() => setToastMessage(''), 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  useEffect(() => {
+    const removeHighlight = () => {
+        if (highlightedElementRef.current) {
+            highlightedElementRef.current.classList.remove('dev-mode-highlight');
+            highlightedElementRef.current = null;
+        }
+    };
+    
+    if (!isDevMode) {
+        removeHighlight();
+        return;
+    }
+
+    const handleMouseOver = (e) => {
+      const target = e.target.closest('[data-dev-name]');
+      if (target && target !== highlightedElementRef.current) {
+        removeHighlight();
+        target.classList.add('dev-mode-highlight');
+        highlightedElementRef.current = target;
+      }
+    };
+
+    const handleMouseOut = (e) => {
+       if (highlightedElementRef.current && !highlightedElementRef.current.contains(e.relatedTarget)) {
+         removeHighlight();
+       }
+    };
+
+    const handleClick = (e) => {
+      const target = e.target.closest('[data-dev-name]');
+      if (target) {
+        // If the click is inside the LeftSidebar, dev mode should ignore it
+        // to allow the toolbar buttons to function correctly.
+        if (target.closest('[data-dev-name^="LeftSidebar"]')) {
+          return;
+        }
+    
+        // Similarly, if a drawing tool is active, dev mode should ignore clicks
+        // on the chart area to allow drawing.
+        const isChartArea = target.closest('[data-dev-name^="ChartArea"]');
+        if (isChartArea && activeTool !== 'crosshair') {
+            return;
+        }
         
-        const isStock = categoryKey === 'stocks';
-        const chartData = generateChartData(parseFloat(symbolToAdd.price.replace(/,/g, '')), symbolToAdd.change, isStock);
-
-        return {
-            ...prevDetails,
-            [symbolToAdd.key]: {
-                ...genericDetailsTemplate,
-                nameKey: symbolToAdd.nameKey,
-                ...chartData,
-            }
-        };
-    });
-    return t('notifications.symbol_added_to_watchlist', { name: t(symbolToAdd.nameKey) });
-  };
-
-  const getCategoryFromType = (typeKey) => {
-    if (!typeKey) return 'stocks';
-    if (typeKey.includes('index')) return 'indices';
-    if (typeKey.includes('stock')) return 'stocks';
-    if (typeKey.includes('forex')) return 'forex';
-    if (typeKey.includes('commodity') || typeKey.includes('futures')) return 'futures';
-    if (typeKey.includes('crypto')) return 'digital_currencies';
-    return 'stocks'; // Default category
-  };
-
-
-  const handleDragStart = (e: React.DragEvent, key: string) => {
-    setTimeout(() => {
-        setDraggingKey(key);
-    }, 0);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, key: string) => {
-      e.preventDefault();
-      if (key === draggingKey || key === dropTarget?.key) {
-          return;
+        // Otherwise, this is a dev mode click meant to copy the component name.
+        e.preventDefault();
+        e.stopPropagation();
+        const devName = target.dataset.devName;
+        navigator.clipboard.writeText(devName);
+        setToastMessage(`${t('toast_copied')}: ${devName}`);
       }
-      
-      const targetElement = e.currentTarget as HTMLDivElement;
-      const rect = targetElement.getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-      const newPosition = e.clientY < midpoint ? 'before' : 'after';
-
-      if (dropTarget?.key !== key || dropTarget?.position !== newPosition) {
-          setDropTarget({ key, position: newPosition });
-      }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      if (!draggingKey || !dropTarget) {
-          handleDragEnd();
-          return;
-      }
-
-      const fromKey = draggingKey;
-      const toKey = dropTarget.key;
-      const position = dropTarget.position;
-      
-      const currentOrder = [...sectionOrder];
-      const fromIndex = currentOrder.indexOf(fromKey);
-      
-      if (fromIndex === -1) {
-          handleDragEnd();
-          return;
-      }
-
-      const [removed] = currentOrder.splice(fromIndex, 1);
-      
-      const toIndexOriginal = currentOrder.indexOf(toKey);
-      let toIndex = toIndexOriginal;
-
-      if (toIndex === -1) { // Dropping on a placeholder for an item that is no longer there
-          handleDragEnd();
-          return;
-      }
-      
-      if (position === 'after') {
-          toIndex += 1;
-      }
-      
-      currentOrder.splice(toIndex, 0, removed);
-      setSectionOrder(currentOrder);
-      handleDragEnd();
-  };
-
-  const handleDragEnd = () => {
-      setDraggingKey(null);
-      setDropTarget(null);
-  };
-
-
-  const sectionComponents = {
-        personalizedBriefing: isAIEnabled ? <PersonalizedBriefing watchlistData={watchlistData} onDismiss={() => toggleSection('personalizedBriefing')} /> : null,
-        marketSummary: <MarketSummary 
-            data={marketData} 
-            activeTab={activeMarketTab} 
-            activeTicker={activeMarketTicker} 
-            onTabChange={handleMarketTabChange} 
-            onTickerChange={handleMarketTickerChange}
-            chartData={currentChartData}
-            tickerInfo={currentTickerInfo}
-            activeTimeframe={activeTimeframe}
-            onTimeframeChange={setActiveTimeframe}
-            favorites={favorites}
-            onToggleFavorite={toggleFavorite}
-          />,
-        communityIdeas: <CommunityIdeas communityIdeasData={publishedCommunityIdeas} onIdeaClick={() => setMainView('trading_analysis')} onTitleClick={() => setMainView('trading_analysis')} />,
-        aiSuggestions: isAIEnabled ? <AISuggestions /> : null,
-        indicatorsAndStrategies: <IndicatorsAndStrategies indicatorsData={publishedIndicators} onIdeaClick={() => setMainView('indicators_strategies')} onTitleClick={() => setMainView('indicators_strategies')} />,
-        saudiStocks: <SaudiStocks />,
-        tradingAnalysis: <TradingAnalysis tradingAnalysisData={combinedTradingAnalysis} onIdeaClick={() => setMainView('trading_analysis')} onTitleClick={() => setMainView('trading_analysis')} />,
-        topPerformingStocks: <TopPerformingStocks />,
-        performanceStocks: <PerformanceStocks />,
-        dividendSchedule: <DividendSchedule reminders={reminders} toggleReminder={toggleReminder} />,
-        usStockNews: <UsStockNews userNews={publishedUserNews.filter(n => n.section === 'usStockNews')} onNewsClick={() => setMainView('news')} onTitleClick={() => setMainView('news')} />,
-        digitalCurrencies: <DigitalCurrencies />,
-        digitalCurrencyAnalysis: <DigitalCurrencyAnalysis userAnalyses={publishedUserAnalyses.filter(a => a.section === 'digitalCurrencyAnalysis')} />,
-        digitalCurrencyPerformance: <DigitalCurrencyPerformance />,
-        digitalCurrencyNews: <DigitalCurrencyNews userNews={publishedUserNews.filter(n => n.section === 'digitalCurrencyNews')} onNewsClick={() => setMainView('news')} onTitleClick={() => setMainView('news')} />,
-        futuresAnalysis: <FuturesAnalysis userAnalyses={publishedUserAnalyses.filter(a => a.section === 'futuresAnalysis')} />,
-        futuresContracts: <FuturesContracts />,
-        futuresNews: <FuturesNews userNews={publishedUserNews.filter(n => n.section === 'futuresNews')} onNewsClick={() => setMainView('news')} onTitleClick={() => setMainView('news')} />,
-        forexAnalysis: <ForexAnalysis userAnalyses={publishedUserAnalyses.filter(a => a.section === 'forexAnalysis')} />,
-        forexHeatmap: <ForexHeatmap onOpenForexMapModal={openForexMapModal} />,
-        forexNews: <ForexNews userNews={publishedUserNews.filter(n => n.section === 'forexNews')} onNewsClick={() => setMainView('news')} onTitleClick={() => setMainView('news')} />,
-        inflationMap: <InflationMap />,
     };
 
-  const renderMainContent = () => {
-    if (isContentLoading && mainView === 'default') {
-        return (
-            <main className="flex-1 flex items-center justify-center">
-                <Loader2 className="animate-spin text-cyan-500" size={48} />
-            </main>
-        );
-    }
-    switch(mainView) {
-      case 'portfolio':
-        return <Portfolio />;
-      case 'options':
-        return <OptionsStrategy />;
-      case 'trading_analysis':
-        return <TradingAnalysisPage communityIdeas={[...publishedCommunityIdeas, ...combinedTradingAnalysis]} onIdeaClick={(idea) => { setSelectedIdea(idea); setMainView('idea_detail'); }} />;
-      case 'indicators_strategies':
-        return <IndicatorsAndStrategiesPage indicatorsData={publishedIndicators} onIdeaClick={(idea) => { setSelectedIdea(idea); setMainView('idea_detail'); }} />;
-      case 'the_leap':
-        return <TheLeapPage />;
-      case 'community_power':
-        return <CommunityPowerPage />;
-      case 'idea_detail':
-        return <IdeaDetailPage idea={selectedIdea} allIdeas={[...publishedCommunityIdeas, ...publishedIndicators, ...combinedTradingAnalysis]} onBack={() => { setMainView('default'); setSelectedIdea(null); }} />;
-      case 'markets':
-        return <MarketsPage />;
-      case 'news':
-        return <NewsPage />;
-      case 'brokers_page':
-        return <BrokersPage />;
-      case 'awards_page':
-        return <AwardsPage />;
-      case 'smartverse':
-        return <SmartversePage />;
-      case 'yield_curves':
-        return <YieldCurvesPage />;
-      case 'prices':
-        return <PricesPage />;
-      case 'default':
-      default:
-        return (
-          <>
-            <main className="flex-1 p-4 md:p-6 space-y-6 pb-20 lg:pb-6">
-                {sectionOrder.map((key) => {
-                     if (!sections[key] || !sectionComponents[key]) return null;
+    document.addEventListener('mouseover', handleMouseOver);
+    document.addEventListener('mouseout', handleMouseOut);
+    document.addEventListener('click', handleClick, true);
 
-                     const isDraggingThis = draggingKey === key;
-                     const isDropTargetBefore = dropTarget?.key === key && dropTarget.position === 'before';
-                     const isDropTargetAfter = dropTarget?.key === key && dropTarget.position === 'after';
+    return () => {
+      document.removeEventListener('mouseover', handleMouseOver);
+      document.removeEventListener('mouseout', handleMouseOut);
+      document.removeEventListener('click', handleClick, true);
+      removeHighlight();
+    };
+  }, [isDevMode, activeTool]);
 
-                     return (
-                        <React.Fragment key={key}>
-                          {isDropTargetBefore && <div className="drop-placeholder" />}
-                          <div
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, key)}
-                              onDragOver={(e) => handleDragOver(e, key)}
-                              onDrop={handleDrop}
-                              onDragEnd={handleDragEnd}
-                              className={isDraggingThis ? 'dragging-section' : ''}
-                          >
-                              <div className="relative group">
-                                  <div title={t('drag_to_reorder_tooltip')} className="absolute top-2 right-2 rtl:right-auto rtl:left-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-200/50 dark:bg-gray-900/50 p-1.5 rounded-full cursor-grab active:cursor-grabbing">
-                                      <GripVertical size={18} className="text-gray-600 dark:text-gray-400" />
-                                  </div>
-                                  {sectionComponents[key]}
-                              </div>
-                          </div>
-                          {isDropTargetAfter && <div className="drop-placeholder" />}
-                        </React.Fragment>
-                     );
-                })}
-            </main>
-          </>
-        );
+
+  useEffect(() => {
+    const fetchAnnotations = async () => {
+        if (!isAiEnabled) {
+            setAiAnnotations([]);
+            return;
+        }
+        if (!chartDataForAnalysis || chartDataForAnalysis.priceData.length < 90) {
+            setAiAnnotations([]);
+            return;
+        }
+        setIsAnnotationsLoading(true);
+        setAnnotationsError('');
+        setAiAnnotations([]);
+        try {
+            const recentData = chartDataForAnalysis.priceData.slice(-90).map(p => ({date: p.time, high: p.high.toFixed(2), low: p.low.toFixed(2)}));
+            
+            const annotationSchema = {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        date: { type: Type.STRING, description: 'The date of the event in "YYYY-MM-DD" format.' },
+                        event: { type: Type.STRING, description: 'A very short description of the event (max 3 words).' },
+                        position: { type: Type.STRING, description: 'Position of the annotation: "above" or "below" the price bar.'}
+                    },
+                    required: ['date', 'event', 'position']
+                }
+            };
+            
+            const result = await ai.models.generateContent({
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: annotationSchema
+                },
+            });
+
+            const text = result.text;
+            if (!text || text.trim() === '') {
+                console.warn("AI returned an empty or undefined response for annotations.");
+                throw new Error("AI returned an empty response. It might be due to content safety filters or a temporary issue.");
+            }
+
+            let rawAnnotations = [];
+            try {
+                rawAnnotations = JSON.parse(text);
+            } catch (parseError) {
+                console.error("Failed to parse AI annotations JSON:", parseError, "Raw text:", text);
+                throw new Error("Received malformed data from the AI service. Please try again.");
+            }
+
+            const processedAnnotations = rawAnnotations.map((item, index) => {
+                const candleData = chartDataForAnalysis.priceData.find(p => p.time === item.date);
+                let priceOffset;
+
+                if (candleData) {
+                    const padding = (candleData.high - candleData.low) * 0.5; // Add some space
+                    if (item.position === 'below') {
+                        // Place below the low, calculate offset from close
+                        priceOffset = (candleData.low - candleData.close) - padding;
+                    } else { // 'above'
+                        // Place above the high, calculate offset from close
+                        priceOffset = (candleData.high - candleData.close) + padding;
+                    }
+                } else {
+                    // Fallback to a simple offset if candle data is not found
+                    priceOffset = item.position === 'below' ? -5 : 5;
+                }
+
+                return {
+                    id: `ai-${index}`,
+                    time: item.date,
+                    priceOffset: priceOffset,
+                    type: 'ai-insight',
+                    label: item.event,
+                };
+            });
+
+            setAiAnnotations(processedAnnotations);
+        } catch (e) {
+            console.error("AI Annotation Error:", e);
+            if (e.message && (e.message.includes('429') || e.message.includes('quota'))) {
+            }
+            setAnnotationsError(e.message || 'Failed to fetch AI annotations.');
+        } finally {
+            setIsAnnotationsLoading(false);
+        }
+    };
+
+    if (rightSidebarView === 'Annotations') {
+        fetchAnnotations();
     }
+  }, [currentStock, chartDataForAnalysis, rightSidebarView, isAiEnabled]);
+
+  const handleToggleReplayMode = () => {
+    setIsReplayMode(prev => !prev);
   };
 
-  const isAnyPanelOpen = activePanel !== null;
+  const handleToggleFullscreen = () => {
+      if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+              console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+          });
+      } else {
+          if (document.exitFullscreen) {
+              document.exitFullscreen();
+          }
+      }
+  };
+
+  useEffect(() => {
+      const handleFullscreenChange = () => {
+          setIsFullscreen(!!document.fullscreenElement);
+      };
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleSaveLayout = useCallback((name: string) => {
+    if (!name) return;
+    try {
+        const layout = {
+            stock: currentStock,
+            chartLayout: chartLayout,
+            chartType: chartType,
+            timeframe: timeframe,
+            indicators: indicators,
+            drawings: useUIStore.getState().drawings,
+            leftSidebarWidth: leftSidebarWidth,
+            rightSidebarWidth: rightSidebarWidth,
+            isLeftPanelOpen: isLeftPanelOpen,
+            rightSidebarView: rightSidebarView,
+        };
+        localStorage.setItem(`vs_layout_${name}`, JSON.stringify(layout));
+        setSavedLayouts(prev => [...new Set([...prev, name])]);
+        setActiveLayoutName(name);
+        window.toast?.(t('toast_layout_saved', { name }));
+    } catch (e) {
+        console.error("Failed to save layout:", e);
+        window.toast?.(t('toast_layout_save_error'));
+    }
+  }, [currentStock, chartLayout, chartType, timeframe, indicators, leftSidebarWidth, rightSidebarWidth, isLeftPanelOpen, rightSidebarView]);
+
+  const handleLoadLayout = useCallback((name: string) => {
+    if (!name) return;
+    try {
+        const savedLayout = localStorage.getItem(`vs_layout_${name}`);
+        if (savedLayout && savedLayout !== 'null' && savedLayout !== 'undefined') {
+            const layout = JSON.parse(savedLayout);
+            setCurrentStock(layout.stock || 'BTCUSD');
+            setChartLayout(layout.chartLayout || 'grid');
+            setChartType(layout.chartType || 'Candlestick');
+            setTimeframe(layout.timeframe || '1D');
+            setIndicators(layout.indicators || []);
+            useUIStore.getState().setDrawingsFromLayout(layout.drawings || []);
+            setLeftSidebarWidth(layout.leftSidebarWidth || 48);
+            setRightSidebarWidth(layout.rightSidebarWidth || 370);
+            const { toggle } = useUIStore.getState();
+            if (layout.isLeftPanelOpen !== isLeftPanelOpen) {
+              toggle('leftPanelOpen');
+            }
+            setRightSidebarView(layout.rightSidebarView || 'AIIndicatorSuggestions');
+            setActiveLayoutName(name);
+            window.toast?.(t('toast_layout_loaded', { name }));
+        }
+    } catch (e) {
+        console.error("Failed to load layout:", e);
+        window.toast?.(t('toast_layout_load_error', { name }));
+    }
+  }, [isLeftPanelOpen, setRightSidebarView]);
+
+  const handleDeleteLayout = useCallback((name: string) => {
+    localStorage.removeItem(`vs_layout_${name}`);
+    setSavedLayouts(prev => prev.filter(l => l !== name));
+    if (name === activeLayoutName) {
+        setActiveLayoutName(null);
+        handleResetLayout(); // Optionally reset to default when active is deleted
+    }
+  }, [activeLayoutName]);
+
+  const handleResetLayout = useCallback(() => {
+      setCurrentStock('BTCUSD');
+      setChartLayout('grid');
+      setChartType('Candlestick');
+      setTimeframe('1D');
+      setIndicators([]);
+      useUIStore.getState().setDrawingsFromLayout([]);
+      setLeftSidebarWidth(48);
+      setRightSidebarWidth(370);
+      if(isLeftPanelOpen) {
+        useUIStore.getState().toggle('leftPanelOpen');
+      }
+      setRightSidebarView('AIIndicatorSuggestions');
+      setIsReplayMode(false);
+      useUIStore.getState().setActiveTool('crosshair');
+      setActiveLayoutName(null);
+      window.toast?.(t('toast_layout_reset'));
+  }, [isLeftPanelOpen, setRightSidebarView]);
   
-  if (mainView === 'bybit') {
-    return <BybitPage setMainView={setMainView} />;
+  const handleClearDrawings = () => {
+      if (areDrawingsLocked) {
+          window.toast?.(t('toast_drawings_locked'));
+          return;
+      }
+      setIsClearConfirmVisible(true);
+  };
+  
+  const confirmClearDrawings = () => {
+      useUIStore.getState().setDrawings([]);
+      setIsClearConfirmVisible(false);
+      window.toast?.(t('toast_drawings_cleared'));
+  };
+
+  const Toast = () => (
+    toastMessage && (
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-[#2A3040] border border-[#383f52] text-white px-4 py-2 rounded-md shadow-lg z-[9999] text-sm flex items-center gap-2 animate-fade-in-up">
+        <CheckCircle size={16} className="text-green-400" />
+        <span>{toastMessage}</span>
+      </div>
+    )
+  );
+  
+  if (isZenMode) {
+    return (
+      <div className="bg-[#0D1017] h-screen w-screen flex flex-col font-sans overflow-hidden" data-dev-name="AppRoot.ZenMode">
+        <button
+          onClick={handleToggleZenMode}
+          className="zen-mode-exit-button"
+          title={t('zen_mode_exit_tooltip')}
+          data-dev-name="ZenMode.ExitButton"
+        >
+          <Minimize size={18} />
+          <span className="ml-2 hidden sm:inline">{t('zen_mode_exit')}</span>
+        </button>
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#12161D]">
+          <ChartGrid
+            layout={'single'} // Force single layout in Zen mode
+            chartType={chartType}
+            stockSymbol={currentStock}
+            timeframe={timeframe}
+            timeRange={timeRange}
+            aiAnnotations={aiAnnotations}
+            indicators={indicators}
+            isAnnotationsLoading={isAnnotationsLoading}
+            isReplayMode={isReplayMode}
+            highlightedAnnotationId={highlightedAnnotationId}
+            isFullscreen={false}
+            alerts={alerts}
+            chartPriceData={chartDataForAnalysis.priceData}
+            onTimeRangeChange={setTimeRange}
+          />
+        </main>
+      </div>
+    );
   }
   
-  if (mainView === 'prices') {
-      return <PricesPage />;
+  if (isFullscreen) {
+    return (
+        <div className="bg-[#0D1017] h-screen w-screen flex flex-col font-sans overflow-hidden">
+            <ChartArea 
+                stockSymbol={currentStock} 
+                chartType={chartType}
+                timeframe={timeframe}
+                timeRange={timeRange}
+                aiAnnotations={aiAnnotations}
+                indicators={indicators}
+                isAnnotationsLoading={isAnnotationsLoading}
+                isReplayMode={isReplayMode}
+                highlightedAnnotationId={highlightedAnnotationId}
+                isFullscreen={isFullscreen}
+                isGridMode={false}
+                gridChartName=""
+                alerts={alerts}
+                chartPriceData={chartDataForAnalysis.priceData}
+                onTimeRangeChange={setTimeRange}
+            />
+        </div>
+    );
   }
 
   return (
-    <>
-    <div style={{ '--panel-width': `${panelWidth}px` } as React.CSSProperties} className={`text-gray-900 dark:text-gray-300 font-sans flex flex-col lg:flex-row h-screen overflow-hidden ${language === 'en' ? 'lg:flex-row-reverse' : ''}`}>
-      <RightToolbar 
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        onOpenTranslateModal={openTranslateModal}
-        onOpenI18nInspector={() => setIsI18nInspectorOpen(true)}
+    <div className="bg-[#0D1017] text-[#E1E3E6] h-screen w-screen flex flex-col font-sans overflow-hidden" data-dev-name="AppRoot">
+      <GlobalErrorModal error={globalError} onClose={() => setGlobalError(null)} />
+      <QuotaExceededModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
+        onDisable={handleDisableAi}
       />
-      <WatchlistPanel 
-        isOpen={activePanel === 'watchlist'} 
-        onAddSectionClick={openAddSectionModal}
-        onAddSymbolClick={openAddSymbolModal}
-        watchlistData={watchlistData}
-        detailedWatchlistData={detailedWatchlistData}
-        updatedSymbols={updatedSymbols}
-      />
-      <ChatPanel isOpen={activePanel === 'chat'} />
-      <ActivityPanel
-          isOpen={activePanel === 'activity'}
-          onClose={() => setActivePanel(null)}
-        />
-      <SocialCommunicationModal
-          isOpen={activePanel === 'social'}
-          onClose={() => setActivePanel(null)}
-        />
-      <NotificationsPanel
-          isOpen={activePanel === 'alerts'}
-          onClose={() => setActivePanel(null)}
-          onOpenSettings={openUserSettingsModal}
-        />
-      <HelpCenterPanel
-        isOpen={activePanel === 'help'}
-        onClose={() => setActivePanel(null)}
-      />
+      <Toast />
+      <SymbolSearchModal />
+      <SettingsModal/>
+      <ConfirmationDialog
+        isOpen={isClearConfirmVisible}
+        onConfirm={confirmClearDrawings}
+        onCancel={() => setIsClearConfirmVisible(false)}
+        title={t('clear_drawings_title')}
+      >
+        <p>{t('clear_drawings_confirm')}</p>
+      </ConfirmationDialog>
 
-      {isAnyPanelOpen && (
-        <div
-            onMouseDown={handleMouseDownOnResizer}
-            className="watchlist-resizer"
-            title={t('tooltip_resize')}
-        />
-      )}
-      
-      <div className={`flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar`}>
-        <div className="flex flex-col min-h-full">
-            <TopHeader 
-              setActivePanel={setActivePanel} 
-              onOpenNewsfeed={openNewsfeedModal} 
-              setMainView={setMainView} 
-// FIX: Corrected function name 'onOpenBestChartsModal' to 'openBestChartsModal' to resolve reference error.
-              onOpenBestCharts={openBestChartsModal} 
-              onOpenUserSettings={openUserSettingsModal}
-              onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-              layouts={layouts}
-              activeLayoutName={activeLayoutName}
-              onSaveLayout={saveLayout}
-              onLoadLayout={loadLayout}
-              onDeleteLayout={deleteLayout}
+      <Header 
+        currentStock={currentStock}
+        chartLayout={chartLayout}
+        onChartLayoutChange={setChartLayout}
+        chartType={chartType}
+        onChartTypeChange={setChartType}
+        onTimeframeChange={handleTimeframeChange}
+        isReplayMode={isReplayMode}
+        onToggleReplayMode={handleToggleReplayMode}
+        isDevMode={isDevMode}
+        onToggleDevMode={() => setIsDevMode(prev => !prev)}
+        onToggleFullscreen={handleToggleFullscreen}
+        onSaveLayout={handleSaveLayout}
+        onLoadLayout={handleLoadLayout}
+        onDeleteLayout={handleDeleteLayout}
+        onResetLayout={handleResetLayout}
+        onToggleZenMode={handleToggleZenMode}
+        activeLayoutName={activeLayoutName}
+        savedLayouts={savedLayouts}
+        onUndo={undoDrawing}
+        onRedo={redoDrawing}
+      />
+      <div className="flex flex-1 border-t border-t-[#2A3040] overflow-hidden" data-dev-name="MainContent">
+          {(isLeftPanelOpen || rightSidebarView) && (
+              <div 
+                  className="fixed inset-0 bg-black/60 z-30 md:hidden"
+                  onClick={() => {
+                      if (isLeftPanelOpen) toggle('leftPanelOpen');
+                      if (rightSidebarView) setRightSidebarView(null);
+                  }}
+                  aria-hidden="true"
+              />
+          )}
+
+        <div style={{ width: isLeftPanelOpen ? `${leftSidebarWidth}px` : '48px' }} className={`
+            fixed top-[56px] bottom-0 left-0 w-[300px] md:w-auto
+            h-full md:h-auto
+            z-40 bg-[#0D1017]
+            md:relative md:top-auto md:bottom-auto
+            transform transition-transform md:transition-width duration-300 ease-in-out
+            ${isLeftPanelOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+            <LeftSidebar 
+                onStockChange={handleStockChange} 
+                currentStock={currentStock} 
+                onClearDrawings={handleClearDrawings}
             />
-            <CryptoTickerTape />
-            <div key={mainView} className="flex-grow flex flex-col">
-                {renderMainContent()}
-            </div>
-            <Footer />
+        </div>
+        <Resizer onMouseDown={handleLeftResize} className="hidden md:flex" />
+
+        <div className="flex-1 flex flex-col overflow-hidden" ref={mainContentRef}>
+            <Toolbar/>
+            <main className="flex-1 flex flex-col overflow-hidden bg-[#12161D]" data-dev-name="ChartContainer">
+              <div className="flex-1 relative flex flex-col">
+                <ChartGrid 
+                  layout={chartLayout}
+                  chartType={chartType}
+                  stockSymbol={currentStock}
+                  timeframe={timeframe}
+                  timeRange={timeRange}
+                  aiAnnotations={aiAnnotations}
+                  indicators={indicators}
+                  isAnnotationsLoading={isAnnotationsLoading}
+                  isReplayMode={isReplayMode}
+                  highlightedAnnotationId={highlightedAnnotationId}
+                  isFullscreen={isFullscreen}
+                  alerts={alerts}
+                  chartPriceData={chartDataForAnalysis.priceData}
+                  onTimeRangeChange={setTimeRange}
+                />
+              </div>
+              <BottomDock 
+                height={bottomDockHeight}
+                onResizeStart={handleDockResizeStart}
+                onToggle={handleToggleDock}
+                onMaximize={handleMaximizeDock}
+                initialTab={bottomDockInitialTab}
+                stockSymbol={currentStock}
+                chartPriceData={chartDataForAnalysis}
+                onAddPineIndicator={handleAddPineIndicator}
+              />
+            </main>
+        </div>
+        
+        {rightSidebarView && <Resizer onMouseDown={handleRightResize} className="hidden md:flex"/>}
+        <div style={{ width: rightSidebarView ? `${rightSidebarWidth}px` : '0px' }} className={`
+             flex-shrink-0 overflow-hidden bg-[#12161D]
+             transition-all duration-300 ease-in-out
+             fixed top-[56px] bottom-0 right-0 h-full z-40
+             transform md:transform-none
+             ${rightSidebarView ? 'translate-x-0' : 'translate-x-full'}
+             md:relative md:top-auto md:bottom-auto md:h-auto
+        `}>
+            <RightSidebar 
+                stockSymbol={currentStock}
+                chartPriceData={chartDataForAnalysis}
+                aiAnnotations={aiAnnotations}
+                isAnnotationsLoading={isAnnotationsLoading}
+                annotationsError={annotationsError}
+                onAnnotationHover={setHighlightedAnnotationId}
+                indicators={indicators}
+                setIndicators={setIndicators}
+            />
         </div>
       </div>
-      <EconomicCalendarModal
-        isOpen={activePanel === 'calendar'}
-        onClose={() => setActivePanel(null)}
-        reminders={reminders}
-        toggleReminder={toggleReminder}
-      />
-      <MobileToolbar activePanel={activePanel} setActivePanel={setActivePanel} onOpenTranslateModal={openTranslateModal} onOpenI18nInspector={() => setIsI18nInspectorOpen(true)} />
+
+      <RightToolbar/>
+      <BottomBar timeframe={timeframe} onTimeframeChange={handleTimeframeChange} onTimeRangeChange={setTimeRange}/>
+      <style>{`
+          @keyframes fade-in-up {
+              from { opacity: 0; transform: translateY(10px); }
+              to { opacity: 1; transform: translateY(0); }
+          }
+          .animate-fade-in-up {
+              animation: fade-in-up 0.3s ease-out forwards;
+          }
+          .transition-width {
+            transition-property: width;
+          }
+      `}</style>
     </div>
-    <AddSectionModal 
-        isOpen={isAddSectionModalOpen}
-        onClose={closeAddSectionModal}
-        sections={sections}
-        toggleSection={toggleSection}
-        resetSections={resetSections}
-      />
-    <AddSymbolModal 
-        isOpen={isAddSymbolModalOpen}
-        onClose={closeAddSymbolModal}
-        onAddSymbol={addSymbolToWatchlist}
-        watchlistData={watchlistData}
-    />
-    <VerifyAccountModal
-        isOpen={isVerifyAccountModalOpen}
-        onClose={closeVerifyAccountModal}
-    />
-    <StockScreener
-        isOpen={activePanel === 'screener'}
-        onClose={() => setActivePanel(null)}
-    />
-    <NewsfeedModal
-        isOpen={isNewsfeedModalOpen}
-        onClose={closeNewsfeedModal}
-    />
-    <UserSettingsModal
-        isOpen={isUserSettingsModalOpen}
-        onClose={closeUserSettingsModal}
-        onOpenBillingSettings={openBillingSettingsModal}
-        onSaveIdea={saveIdea}
-        communityIdeas={communityIdeas}
-        indicatorsAndStrategies={indicatorsAndStrategiesData}
-        tradingAnalysis={tradingAnalysisData}
-        onDeleteIdea={deleteIdea}
-        userNews={userNews}
-        onSaveNews={saveNews}
-        onDeleteNews={deleteNews}
-        watchlistData={watchlistData}
-        userAnalyses={userAnalyses}
-        onSaveAnalysis={saveAnalysis}
-        onDeleteAnalysis={deleteAnalysis}
-    />
-    <BillingSettingsModal
-        isOpen={isBillingSettingsModalOpen}
-        onClose={closeBillingSettingsModal}
-    />
-    <BestChartsModal
-        isOpen={isBestChartsModalOpen}
-        onClose={closeBestChartsModal}
-    />
-    <ForexHeatmapModal
-        isOpen={isForexMapModalOpen}
-        onClose={closeForexMapModal}
-    />
-    {isAIEnabled && <AssistantFAB onOpen={() => setIsAssistantModalOpen(true)} />}
-    {isAIEnabled && <AssistantModal 
-        isOpen={isAssistantModalOpen} 
-        onClose={() => setIsAssistantModalOpen(false)}
-        addSymbolToWatchlist={addSymbolToWatchlist}
-        navigateTo={setMainView}
-    />}
-    <TranslateModal isOpen={isTranslateModalOpen} onClose={closeTranslateModal} />
-    <CommandPalette 
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        setMainView={setMainView}
-        setTheme={setTheme}
-        addSymbolToWatchlist={addSymbolToWatchlist}
-        allSymbols={allSymbolsForSearch}
-    />
-    <MissingTranslationsModal />
-    <QuotaErrorModal />
-    <DeveloperI18nInspector isOpen={isI18nInspectorOpen} onClose={() => setIsI18nInspectorOpen(false)} />
-    </>
   );
 }
