@@ -9,13 +9,14 @@ import { useLanguage } from '../i18n/LanguageContext';
 const DEFAULT_NEWS_IMAGE_URL = 'https://i.imgur.com/8383I48.png';
 
 const IndicatorCard = (props: any) => {
-    const { indicator } = props;
+    const { indicator, onIdeaClick } = props;
     const { t } = useLanguage();
     const [likes, setLikes] = useState(indicator.likes);
     const [isLiked, setIsLiked] = useState(false);
     const [copyTooltip, setCopyTooltip] = useState(t('indicator_copy_tooltip'));
 
-    const handleLike = () => {
+    const handleLike = (e) => {
+        e.stopPropagation();
         setLikes(isLiked ? likes - 1 : likes + 1);
         setIsLiked(!isLiked);
     };
@@ -28,7 +29,7 @@ const IndicatorCard = (props: any) => {
     };
 
     return (
-        <div className="w-72 sm:w-80 flex-shrink-0 group">
+        <div onClick={onIdeaClick} className="w-72 sm:w-80 flex-shrink-0 group cursor-pointer">
             <div className="relative mb-3">
                 <div className="bg-white dark:bg-[#1C2331] rounded-lg p-2 border border-gray-200 dark:border-gray-800">
                      <img src={indicator.img || DEFAULT_NEWS_IMAGE_URL} alt={indicator.title} className="w-full h-40 object-cover rounded-md" loading="lazy" decoding="async" 
@@ -55,7 +56,7 @@ const IndicatorCard = (props: any) => {
                             <Rocket size={16} className={isLiked ? 'text-green-500 fill-current' : ''} />
                             <span>{likes}</span>
                         </button>
-                        <button onClick={() => console.log('Comment on:', indicator.title)} title={t('comment_tooltip')} className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                        <button onClick={(e) => { e.stopPropagation(); onIdeaClick(); }} title={t('comment_tooltip')} className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                             <MessageCircle size={16} />
                             {indicator.comments > 0 && <span>{indicator.comments}</span>}
                         </button>
@@ -72,30 +73,12 @@ const IndicatorCard = (props: any) => {
 };
 
 
-export const IndicatorsAndStrategies = () => {
+export const IndicatorsAndStrategies = ({ indicatorsData, onIdeaClick, onTitleClick }) => {
     const { t, language } = useLanguage();
-    const tabs = t('indicators_strategies_tabs');
-    const [activeTab, setActiveTab] = useState(tabs[tabs.length - 1]);
+    const tabsValue = t('indicators_strategies_tabs');
+    const tabs = Array.isArray(tabsValue) ? tabsValue : [];
+    const [activeTab, setActiveTab] = useState(tabs.length > 0 ? tabs[tabs.length - 1] : '');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-    const indicatorImages = [
-        'https://images.unsplash.com/photo-1665686306574-1ace09918530?q=80&w=600&h=400&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600&h=400&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1560415755-bd80d06eda60?q=80&w=600&h=400&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1638368482963-94c036353364?q=80&w=600&h=400&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1587614295999-6c1c13675123?q=80&w=600&h=400&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=600&h=400&auto=format&fit=crop',
-    ];
-
-    const indicatorsData = [
-        { id: 1, title: t('indicator1_title'), author: t('indicator1_author'), date: t('indicator1_date'), likes: 41, comments: 2, description: t('indicator1_desc') },
-        { id: 2, title: t('indicator2_title'), author: t('indicator2_author'), date: t('indicator2_date'), likes: 19, comments: 2, description: t('indicator2_desc') },
-        { id: 3, title: t('indicator3_title'), author: t('indicator3_author'), date: t('indicator3_date'), likes: 428, comments: 2, description: t('indicator3_desc') },
-        { id: 4, title: t('indicator4_title'), author: t('indicator4_author'), date: t('indicator4_date'), likes: 255, comments: 15, description: t('indicator4_desc') },
-        { id: 5, title: t('indicator5_title'), author: t('indicator5_author'), date: t('indicator5_date'), likes: 310, comments: 28, description: t('indicator5_desc') },
-        { id: 6, title: t('indicator6_title'), author: t('indicator6_author'), date: t('indicator6_date'), likes: 512, comments: 45, description: t('indicator6_desc') },
-    ].map((indicator, index) => ({...indicator, img: indicatorImages[index % indicatorImages.length]}));
-
 
     const handleScroll = (direction: 'backward' | 'forward') => {
         if (scrollContainerRef.current) {
@@ -106,21 +89,28 @@ export const IndicatorsAndStrategies = () => {
     };
 
     return (
-        <section>
+        <section className="bg-white dark:bg-black rounded-lg p-4 sm:p-6">
             <div className="mb-4">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('indicators_strategies_title')} {language === 'ar' ? '<' : '>'}</h2>
+                <button onClick={onTitleClick} className="w-full text-left">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('indicators_strategies_title')} {language === 'ar' ? '<' : '>'}</h2>
+                </button>
                 <div className="flex gap-2 justify-start overflow-x-auto no-scrollbar">
                     {tabs.map((tab) => (
-                        <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-200 dark:bg-[#2A2E39] text-gray-900 dark:text-white' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}>{tab}</button>
+                        <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-200 dark:bg-[#2A2E39] text-gray-900 dark:text-white' : 'bg-gray-100 dark:bg-[#1C2331] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}>{tab}</button>
                     ))}
                 </div>
             </div>
             <div className="flex items-center gap-4">
                 <button onClick={() => handleScroll('backward')} title={t('scroll_left_tooltip')} className="p-3 bg-white dark:bg-[#1C2331] rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white self-center hidden md:block border border-gray-200 dark:border-gray-700">{language === 'ar' ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}</button>
                 <div ref={scrollContainerRef} className="flex-1 flex gap-6 overflow-x-auto no-scrollbar pb-4">
-                    {indicatorsData.map(indicator => <IndicatorCard key={indicator.id} indicator={indicator} />)}
+                    {indicatorsData.map(indicator => <IndicatorCard key={indicator.id} indicator={indicator} onIdeaClick={onIdeaClick} />)}
                 </div>
                 <button onClick={() => handleScroll('forward')} title={t('scroll_right_tooltip')} className="p-3 bg-white dark:bg-[#1C2331] rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white self-center hidden md:block border border-gray-200 dark:border-gray-700">{language === 'ar' ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}</button>
+            </div>
+            <div className="text-center mt-6">
+                <button onClick={onTitleClick} className="text-cyan-600 dark:text-cyan-400 text-sm hover:underline">
+                    {t('read_more_link')} {language === 'ar' ? '<' : '>'}
+                </button>
             </div>
         </section>
     );

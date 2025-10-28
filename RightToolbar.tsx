@@ -3,17 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React from 'react';
-// FIX: Import Bot icon and use it for chat to ensure consistency
-import { Bookmark, Clock, Calendar, Rss, Bell, HelpCircle, MessageSquare, Grid3x3, Radar, CodeXml, Languages, Bot, BrainCircuit } from 'lucide-react';
+// FIX: Import Bot icon and use it for chat to ensure consistency. Remove unused MessageSquare.
+// FIX: Import BrainCircuit icon for the Developer i18n Inspector button.
+import { Bookmark, Clock, Calendar, Rss, Bell, HelpCircle, Grid3x3, Radar, CodeXml, Languages, Bot, BrainCircuit } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useDeveloperMode } from '../i18n/DeveloperModeContext';
 
+// FIX: Added onOpenI18nInspector to props to fix type error.
 export const RightToolbar = ({ activePanel, setActivePanel, onOpenTranslateModal, onOpenI18nInspector }) => {
   const { t } = useLanguage();
   const { isDevMode, toggleDevMode } = useDeveloperMode();
 
   const topIcons = [
     { id: 'watchlist', icon: Bookmark, 'aria-label-key': 'watchlist_tooltip' },
+    // FIX: Changed 'history' to 'activity' to match the panel component and translation key.
     { id: 'activity', icon: Clock, 'aria-label-key': 'my_activity_tooltip' },
     { id: 'chat', icon: Bot, 'aria-label-key': 'chat_tooltip' },
   ];
@@ -44,10 +47,8 @@ export const RightToolbar = ({ activePanel, setActivePanel, onOpenTranslateModal
         }}
         aria-label={tooltipText}
         title={tooltipText}
-        className={`p-3 my-1 rounded-lg transition-colors duration-200 
-        ${isActive 
-            ? 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' 
-            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white'}`}
+        className={`p-3 my-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 
+        ${isActive ? 'bg-blue-600 text-white dark:bg-blue-500' : 'text-gray-500 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}`}
       >
         <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
       </button>
@@ -62,10 +63,8 @@ export const RightToolbar = ({ activePanel, setActivePanel, onOpenTranslateModal
         onClick={toggleDevMode}
         title={tooltipText}
         aria-label={tooltipText}
-        className={`p-3 my-1 rounded-lg transition-colors duration-200 
-        ${isActive 
-            ? 'bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400' 
-            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white'}`}
+        className={`p-3 my-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 
+        ${isActive ? 'bg-cyan-400 text-black dark:bg-cyan-500 dark:text-black' : 'text-gray-500 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}`}
       >
         <CodeXml size={22} strokeWidth={isActive ? 2.5 : 2} />
       </button>
@@ -79,7 +78,7 @@ export const RightToolbar = ({ activePanel, setActivePanel, onOpenTranslateModal
         onClick={onOpenI18nInspector}
         title={tooltipText}
         aria-label={tooltipText}
-        className={`p-3 my-1 rounded-lg text-purple-500 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-500/10 transition-colors duration-200`}
+        className={`p-3 my-1 rounded-full text-purple-500 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors duration-200`}
       >
         <BrainCircuit size={22} strokeWidth={2.5} />
       </button>
