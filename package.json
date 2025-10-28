@@ -1,0 +1,41 @@
+{
+  "name": "copy-of-copy-of-2505",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/browser": "^4.1.12",
+    "d3": "7",
+    "lucide-react": "^0.540.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "topojson-client": "3",
+    "@google/genai": "^1.15.0",
+    "recharts": "^2.12.7",
+    "d3-selection": "^3.0.0",
+    "d3-scale-chromatic": "^3.1.0",
+    "d3-shape": "^3.2.0",
+    "d3-geo": "^3.1.1",
+    "d3-array": "^3.2.4",
+    "d3-fetch": "^3.0.1",
+    "d3-axis": "^3.0.0",
+    "d3-time-format": "^4.1.0",
+    "d3-format": "^3.1.0",
+    "d3-scale": "^4.0.2",
+    "chart.js": "^4.4.3",
+    "react-chartjs-2": "^5.2.0",
+    "framer-motion": "^12.23.12",
+    "chartjs-plugin-annotation": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

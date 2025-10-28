@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="theme-color" content="#ffffff" />
+    <meta charset="UTF-8" />
+
+    <link rel="icon" type="image/png" href="https://i.ibb.co/DgTDSpjZ/3-vestor.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VESTOR SMART</title>
+    <link rel="stylesheet" href="/index.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans:wght@400;500;700&family=Poppins:wght@400;500;600;700;900&family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    <script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('theme');
+      var systemDark = window.matchMedia &&
+                       window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var dark = saved ? (saved === 'dark') : systemDark;
+      document.documentElement.classList.toggle('dark', dark);
+    } catch(e) {}
+  })();
+</script>
+
+<style>
+:root{--bg:#ffffff;--text:#0a0a0a;}
+html.dark{--bg:#0a0a0a;--text:#e5e7eb;}
+body{background:var(--bg);color:var(--text);}
+</style>
+<style>
+/* Vestor Smart Site Header */
+.vs-header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:.75rem;
+  padding:.5rem 1rem;background:var(--bg,#fff);border-bottom:1px solid rgba(0,0,0,.08);}
+html.dark .vs-header{background:var(--bg,#0a0a0a);border-color:rgba(255,255,255,.1);}
+.vs-brand{display:flex;align-items:center;gap:.5rem;text-decoration:none;}
+.vs-brand .vs-title{font-weight:700;font-size:1.05rem;color:var(--text,#0a0a0a)}
+html.dark .vs-brand .vs-title{color:var(--text,#e5e7eb)}
+.vs-spacer{height:0.5rem}
+body{--header-offset:56px;}
+.vs-hpad{height:var(--header-offset);}
+</style>
+<link rel="stylesheet" href="/index.css">
+</head>
+
+<body>
+    <script type="importmap">
+{
+  "imports": {
+    "@tailwindcss/browser": "https://esm.sh/@tailwindcss/browser@^4.1.12",
+    "d3": "https://cdn.jsdelivr.net/npm/d3@7/+esm",
+    "lucide-react": "https://esm.sh/lucide-react@^0.540.0",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/client": "https://esm.sh/react-dom@^19.0.0/client",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "topojson-client": "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm",
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "recharts": "https://esm.sh/recharts@^2.12.7",
+    "react-dom": "https://esm.sh/react-dom@^19.1.1",
+    "d3-selection": "https://esm.sh/d3-selection@^3.0.0",
+    "d3-scale-chromatic": "https://esm.sh/d3-scale-chromatic@^3.1.0",
+    "d3-shape": "https://esm.sh/d3-shape@^3.2.0",
+    "d3-geo": "https://esm.sh/d3-geo@^3.1.1",
+    "d3-array": "https://esm.sh/d3-array@^3.2.4",
+    "d3-fetch": "https://esm.sh/d3-fetch@^3.0.1",
+    "d3-axis": "https://esm.sh/d3-axis@^3.0.0",
+    "d3-time-format": "https://esm.sh/d3-time-format@^4.1.0",
+    "d3-format": "https://esm.sh/d3-format@^3.1.0",
+    "d3-scale": "https://esm.sh/d3-scale@^4.0.2",
+    "chart.js": "https://esm.sh/chart.js@^4.4.3/auto",
+    "react-chartjs-2": "https://esm.sh/react-chartjs-2@^5.2.0",
+    "framer-motion": "https://esm.sh/framer-motion@^12.23.12",
+    "chartjs-plugin-annotation": "https://esm.sh/chartjs-plugin-annotation@^3.0.1",
+    "path": "https://esm.sh/path-browserify@1.0.1",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0"
+  }
+}
+</script>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+<script>
+(function(){
+  try{
+    var img = document.getElementById('app-logo');
+    if(!img) return;
+    function apply(){
+      var isDark = document.documentElement.classList.contains('dark');
+      var darkSrc = img.getAttribute('data-dark');
+      var lightSrc = img.getAttribute('data-light');
+      img.src = isDark ? (darkSrc || img.src) : (lightSrc || img.src);
+    }
+    apply();
+    var mo = new MutationObserver(apply);
+    mo.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+    // Also listen for storage/theme-toggle if exists
+    window.addEventListener('storage', function(e){ if(e.key==='theme') apply(); });
+    var btn = document.getElementById('theme-toggle'); if(btn){ btn.addEventListener('click', apply); }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
