@@ -4,11 +4,11 @@
 */
 import React, { useState, useRef, useCallback } from 'react';
 import { Maximize2, GitCompareArrows, Bookmark, Code, X, Bot, Loader2 } from 'lucide-react';
-import { useLanguage } from './i18n/LanguageContext';
-import { useAI } from './i18n/AIContext';
+import { useLanguage } from '../i18n/LanguageContext';
+import { useAI } from '../i18n/AIContext';
 // FIX: Import GenerateContentResponse to handle API response type correctly.
 import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
-import { SymbolIcon } from './components/SymbolIcon';
+import { SymbolIcon } from './SymbolIcon';
 
 const ChartAnalysisPanel = ({ result, onClose, t }) => {
     return (
@@ -51,10 +51,10 @@ export const MainChart = ({ chartData, tickerInfo, activeTimeframe, onTimeframeC
       error: null,
   });
 
-  const gridColor = isDark ? "#374151" : "#E5E7EB";
-  const textColor = isDark ? "#d1d5db" : "#6B7281";
-  const tooltipBgClass = isDark ? "bg-black/80 text-white" : "bg-white/90 text-black border border-gray-200";
-  const dotStrokeColor = isDark ? "white" : "#131722";
+  const gridColor = isDark ? "#30363d" : "#e5e7eb";
+  const textColor = isDark ? "#8b949e" : "#6B7281";
+  const tooltipBgClass = isDark ? "bg-gray-900 text-gray-200 border border-gray-700" : "bg-white text-gray-800 border border-gray-200";
+  const dotStrokeColor = isDark ? "#0d1117" : "#f9fafb";
   
   const handleAnalyzeChart = useCallback(async () => {
     if (!tickerInfo || !chartData) return;
@@ -135,7 +135,8 @@ export const MainChart = ({ chartData, tickerInfo, activeTimeframe, onTimeframeC
       return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   });
 
-  const chartPeriods = t('chart_periods');
+  const chartPeriodsValue = t('chart_periods');
+  const chartPeriods = Array.isArray(chartPeriodsValue) ? chartPeriodsValue : [];
   
   const chartTools = [
       { Icon: Maximize2, key: 'maximize', titleKey: 'chart_tool_maximize' },
@@ -203,7 +204,7 @@ export const MainChart = ({ chartData, tickerInfo, activeTimeframe, onTimeframeC
           {/* Price Chart Y-axis grid lines and labels */}
           {yAxisLabels.map((label, i) => (
             <g key={`price-grid-${i}`}>
-              <line x1="0" y1={priceChartYOffset + i * (priceChartHeight / (yAxisLabels.length -1))} x2={svgWidth} y2={priceChartYOffset + i * (priceChartHeight / (yAxisLabels.length -1))} stroke={gridColor} strokeWidth="1" />
+              <line x1="0" y1={priceChartYOffset + i * (priceChartHeight / (yAxisLabels.length -1))} x2={svgWidth} y2={priceChartYOffset + i * (priceChartHeight / (yAxisLabels.length -1))} stroke={gridColor} strokeWidth="0.5" strokeDasharray="2,4" />
               <text x={svgWidth - 10} y={priceChartYOffset + i * (priceChartHeight / (yAxisLabels.length -1)) - 5} fill={textColor} fontSize="12" textAnchor="end">{label}</text>
             </g>
           ))}
@@ -247,7 +248,7 @@ export const MainChart = ({ chartData, tickerInfo, activeTimeframe, onTimeframeC
               
               {/* Main tooltip */}
               <foreignObject x={tooltipX} y={tooltipYPos} width="110" height="85">
-                <div className={`${tooltipBgClass} text-xs rounded-lg p-2 shadow-lg backdrop-blur-sm`}>
+                <div className={`${tooltipBgClass} text-xs rounded-lg p-2 shadow-lg backdrop-blur-md`}>
                   {tooltipData && (
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 font-mono">
                         <span className="font-bold text-gray-500 dark:text-gray-400">{t('chart_ohlc_o')}:</span><span>{tooltipData.open.toFixed(2)}</span>
